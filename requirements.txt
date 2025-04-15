@@ -4,7 +4,7 @@ open3d==0.18.0
 numpy==1.22.2
 omegaconf==2.3.0
 flash-attn>=2.5.9post1
-spconv
+spconv-cu120
 safetensors
 easydict
 jaxtyping
