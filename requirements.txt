@@ -3,8 +3,11 @@ torch-scatter==2.1.2
 open3d==0.18.0
 numpy==1.22.2
 omegaconf==2.3.0
-flash-attn==2.5.9post1
+flash-attn>=2.5.9post1
 spconv
 safetensors
 easydict
 jaxtyping
+gradio
+huggingface_hub
+hf_transfer
