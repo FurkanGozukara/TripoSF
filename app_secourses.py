@@ -39,6 +39,11 @@ from typing import *
 from triposf.modules import sparse as sp
 from misc import get_device, find
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="TripoSF VAE Reconstruction App")
+    parser.add_argument("--share", action="store_true", help="Enable Gradio live sharing")
+    return parser.parse_args()
+
 def get_random_hex():
     random_bytes = os.urandom(8)
     random_hex = random_bytes.hex()
@@ -270,7 +275,7 @@ class TripoSFVAEInference(torch.nn.Module):
 
 # Header and constants
 HEADER = """
-### TripoSF VAE Reconstruction Improved SECourses App V1 - https://www.patreon.com/posts/126707772
+### TripoSF VAE Reconstruction Improved SECourses App V3 - https://www.patreon.com/posts/126707772
 ### TripoSF represents a significant leap forward in 3D shape modeling, combining high-resolution capabilities with arbitrary topology support.
 1. It is recommanded to enable `pruning` for open-surface objects
 
@@ -519,4 +524,5 @@ with gr.Blocks(title="TripoSFRecon") as demo:
         outputs=[reconstructed_model_output],
     )
 
-demo.launch(inbrowser=True)
+args = parse_args()
+demo.launch(inbrowser=True, share=args.share)
