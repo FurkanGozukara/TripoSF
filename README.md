@@ -1,5 +1,21 @@
 # TripoSF VAE Reconstruction App
 
+## 🎯 What This App Does
+
+**Transform broken, low-quality 3D models into perfect, high-quality meshes using AI.**
+
+This app takes your problematic 3D files (.obj, .glb) and automatically:
+- ✨ **Fixes holes and gaps** in 3D models
+- 🔧 **Repairs corrupted or broken meshes** 
+- 📐 **Improves geometry quality** and triangle distribution
+- 🎮 **Creates animation-ready models** with clean topology
+- 🖨️ **Prepares meshes for 3D printing** by fixing structural issues
+- 📱 **Cleans up noisy 3D scans** from phones or cameras
+
+**Perfect for:** Game developers, 3D artists, researchers, 3D printing enthusiasts, and anyone working with 3D models.
+
+---
+
 A state-of-the-art 3D mesh reconstruction application powered by TripoSF (Triplane-based Sparse 3D Foundation) and Variational Autoencoder (VAE) technology. This app transforms low-quality, corrupted, or poorly structured 3D meshes into high-quality, clean reconstructions using advanced AI techniques.
 
 ## What is 3D Mesh Reconstruction?
