@@ -214,15 +214,6 @@ class TripoSFVAEInference(torch.nn.Module):
 
 HEADER = """
 # TripoSF VAE Reconstruction [TripoSF](https://github.com/VAST-AI-Research/TripoSF)
-## TripoSF represents a significant leap forward in 3D shape modeling, combining high-resolution capabilities with arbitrary topology support.
-## 📋 Some Tips:
-
-1. It is recommanded to enable `pruning` for open-surface objects
-
-2. Increasing sampling points is helpful for reconstructing complex shapes
-
-<p style="font-size: 1.1em;">By <a href="https://www.tripo3d.ai/" style="color: #1E90FF; text-decoration: none; font-weight: bold;">Tripo</a></p>
-
 """
 MAX_SEED = np.iinfo(np.int32).max
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -294,7 +285,16 @@ with gr.Blocks(title="TripoSFRecon") as demo:
             normalized_model_output = gr.Model3D(label="Normalized Mesh", interactive=True)
             reconstructed_model_output = gr.Model3D(label="Reconstructed Mesh", interactive=True)
 
+    with gr.Row():
+        gr.Markdown("""## TripoSF represents a significant leap forward in 3D shape modeling, combining high-resolution capabilities with arbitrary topology support.
+## 📋 Some Tips:
 
+1. It is recommanded to enable `pruning` for open-surface objects
+
+2. Increasing sampling points is helpful for reconstructing complex shapes
+
+<p style="font-size: 1.1em;">By <a href="https://www.tripo3d.ai/" style="color: #1E90FF; text-decoration: none; font-weight: bold;">Tripo</a></p>
+""")
     recon_button.click(
         run_normalize_mesh,
         inputs=[input_mesh_path],

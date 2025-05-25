@@ -33,6 +33,7 @@ import time
 import argparse
 import subprocess
 import platform
+import glob
 from omegaconf import OmegaConf
 from typing import *
 
@@ -53,6 +54,56 @@ def get_random_seed(randomize_seed, seed):
     if randomize_seed:
         seed = random.randint(0, MAX_SEED)
     return seed
+
+def get_next_sequential_number(base_path):
+    """
+    Get the next sequential number by checking existing numbered subfolders.
+    Returns the next available number.
+    """
+    counter = 1
+    while True:
+        subfolder_name = f"{counter:04d}"
+        subfolder_path = os.path.join(base_path, subfolder_name)
+        if not os.path.exists(subfolder_path):
+            return counter
+        counter += 1
+
+def get_sequential_filename(base_path, suffix, extension, file_number=None):
+    """
+    Generate a sequential filename and create subfolder structure.
+    Format: outputs/XXXX/XXXX_suffix.extension
+    Returns the full path and the file number used.
+    """
+    if file_number is None:
+        file_number = get_next_sequential_number(base_path)
+    
+    # Create subfolder
+    subfolder_name = f"{file_number:04d}"
+    subfolder_path = os.path.join(base_path, subfolder_name)
+    os.makedirs(subfolder_path, exist_ok=True)
+    
+    # Create filename
+    filename = f"{file_number:04d}_{suffix}.{extension}"
+    full_path = os.path.join(subfolder_path, filename)
+    
+    return full_path, file_number
+
+def get_batch_output_filename(input_file_path, output_dir, suffix):
+    """
+    Generate output filename for batch processing using input file name.
+    """
+    # Get the base filename without extension
+    base_name = os.path.splitext(os.path.basename(input_file_path))[0]
+    
+    # Create subfolder with the same name as input file
+    subfolder_path = os.path.join(output_dir, base_name)
+    os.makedirs(subfolder_path, exist_ok=True)
+    
+    # Create filename
+    filename = f"{base_name}_{suffix}.obj"
+    full_path = os.path.join(subfolder_path, filename)
+    
+    return full_path
 
 def normalize_mesh(mesh_path):
     scene = trimesh.load(mesh_path, process=False, force='scene')
@@ -275,13 +326,7 @@ class TripoSFVAEInference(torch.nn.Module):
 
 # Header and constants
 HEADER = """
-### TripoSF VAE Reconstruction Improved SECourses App V3 - https://www.patreon.com/posts/126707772
-### TripoSF represents a significant leap forward in 3D shape modeling, combining high-resolution capabilities with arbitrary topology support.
-1. It is recommanded to enable `pruning` for open-surface objects
-
-2. Increasing sampling points is helpful for reconstructing complex shapes
-
-3. Supports both OBJ and GLB file formats with robust conversion (GLB files will be automatically converted to OBJ)
+### TripoSF VAE Reconstruction Improved SECourses App V5 - https://www.patreon.com/posts/126707772
 """
 MAX_SEED = np.iinfo(np.int32).max
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -292,13 +337,19 @@ output_dir = "outputs"
 os.makedirs(output_dir, exist_ok=True)
 model = TripoSFVAEInference.from_config(config).to(device)
 
-def robust_glb_to_obj_conversion(input_glb_path):
+def robust_glb_to_obj_conversion(input_glb_path, use_batch_naming=False, batch_output_dir=None, file_number=None, original_input_path=None):
     """
     A robust GLB to OBJ converter that tries multiple strategies and repair techniques
     to ensure a valid mesh is produced.
     """
-    mesh_name = os.path.basename(input_glb_path).split('.')[0]
-    obj_path = f"{output_dir}/{mesh_name}_{random_hex}_converted.obj"
+    if use_batch_naming and batch_output_dir:
+        # Use original input path for folder naming, not the GLB path
+        base_path = original_input_path if original_input_path else input_glb_path
+        obj_path = get_batch_output_filename(base_path, batch_output_dir, "converted")
+    else:
+        # For single file processing, use the provided file number
+        # (file_number should already be determined by the calling function)
+        obj_path, _ = get_sequential_filename(output_dir, "converted", "obj", file_number)
     
     # Strategy 1: Direct trimesh load
     try:
@@ -360,52 +411,66 @@ def robust_glb_to_obj_conversion(input_glb_path):
     # If we reach here, all strategies failed
     raise ValueError("Failed to convert GLB to a valid OBJ mesh using all available strategies")
 
-def run_normalize_mesh(input_mesh):
+def run_normalize_mesh(input_mesh, use_batch_naming=False, batch_output_dir=None, file_number=None, original_input_path=None):
     try:
+        # Store the original input path for consistent naming
+        if original_input_path is None:
+            original_input_path = input_mesh
+            
+        # Determine file number first if not provided
+        if not use_batch_naming and file_number is None:
+            file_number = get_next_sequential_number(output_dir)
+            
         # Convert GLB to OBJ if needed
         if input_mesh.lower().endswith('.glb'):
             try:
-                input_mesh = robust_glb_to_obj_conversion(input_mesh)
+                input_mesh = robust_glb_to_obj_conversion(input_mesh, use_batch_naming, batch_output_dir, file_number, original_input_path)
                 print(f"Successfully converted GLB to: {input_mesh}")
             except Exception as e:
                 print(f"GLB conversion error: {str(e)}")
-                return gr.update(value=None), f"Error: Failed to convert GLB file to OBJ. {str(e)}"
+                return gr.update(value=None), f"Error: Failed to convert GLB file to OBJ. {str(e)}", None
         
         # Basic validation - relaxed to allow more files through
         try:
             mesh_validate = trimesh.load(input_mesh)
             if len(mesh_validate.vertices) == 0:  # Only check for vertices, not faces
                 print(f"Validation error: No vertices found")
-                return gr.update(value=None), f"Error: The mesh file doesn't contain any vertices. Please try another file."
+                return gr.update(value=None), f"Error: The mesh file doesn't contain any vertices. Please try another file.", None
         except Exception as e:
             print(f"Mesh validation error: {str(e)}")
-            return gr.update(value=None), f"Error: Failed to validate mesh file: {str(e)}"
+            return gr.update(value=None), f"Error: Failed to validate mesh file: {str(e)}", None
         
         print(f"Starting normalization of {input_mesh}")
         mesh_gt = normalize_mesh(input_mesh)
-        mesh_name = os.path.basename(input_mesh).split('.')[0]
-        mesh_path_gt = f"{output_dir}/{mesh_name}_{random_hex}_normalized.obj"
+        
+        if use_batch_naming and batch_output_dir:
+            # Use original input path for consistent folder naming
+            mesh_path_gt = get_batch_output_filename(original_input_path, batch_output_dir, "normalized")
+            used_file_number = None
+        else:
+            # Use the file number (already determined above)
+            mesh_path_gt, used_file_number = get_sequential_filename(output_dir, "normalized", "obj", file_number)
         
         # Simplified mesh creation - avoid extra validation that might reject valid meshes
         try:
             mesh_normalized = trimesh.Trimesh(vertices=mesh_gt.vertices.tolist(), faces=mesh_gt.faces.tolist())
             mesh_normalized.export(mesh_path_gt)
             print(f"Successfully normalized and saved: {mesh_path_gt}")
-            return mesh_path_gt, None
+            return mesh_path_gt, None, used_file_number if not use_batch_naming else None
         except Exception as e:
             print(f"Error saving normalized mesh: {str(e)}")
             # As a fallback, try to save directly
             try:
                 mesh_gt.export(mesh_path_gt)
                 print(f"Used fallback export for: {mesh_path_gt}")
-                return mesh_path_gt, None
+                return mesh_path_gt, None, used_file_number if not use_batch_naming else None
             except:
-                return gr.update(value=None), f"Error during mesh export: {str(e)}"
+                return gr.update(value=None), f"Error during mesh export: {str(e)}", None
     except Exception as e:
         print(f"General normalization error: {str(e)}")
-        return gr.update(value=None), f"Error during mesh normalization: {str(e)}"
+        return gr.update(value=None), f"Error during mesh normalization: {str(e)}", None
 
-def run_reconstruction(input_mesh, sample_points_num, pruning, seed, error_msg):
+def run_reconstruction(input_mesh, sample_points_num, pruning, seed, error_msg, normalized_mesh_path=None, use_batch_naming=False, batch_output_dir=None, file_number=None, original_input_path=None):
     try:
         # If there was an error in normalization, don't proceed
         if error_msg:
@@ -415,16 +480,23 @@ def run_reconstruction(input_mesh, sample_points_num, pruning, seed, error_msg):
         model.cfg.pruning = pruning
         model.cfg.sample_points_num = sample_points_num
         
-        # For GLB files, the normalized mesh has a different path structure
-        if input_mesh.lower().endswith('.glb'):
-            # Use the actual converted and normalized path structure
-            mesh_name = os.path.basename(input_mesh).split('.')[0]
-            converted_name = f"{mesh_name}_{random_hex}_converted"
-            mesh_path_gt = f"{output_dir}/{converted_name}_{random_hex}_normalized.obj"
+        # Use the normalized mesh path if provided (from batch processing or previous step)
+        if normalized_mesh_path and os.path.exists(normalized_mesh_path):
+            mesh_path_gt = normalized_mesh_path
         else:
-            # Original path structure for OBJ files
-            mesh_name = os.path.basename(input_mesh).split('.')[0]
-            mesh_path_gt = f"{output_dir}/{mesh_name}_{random_hex}_normalized.obj"
+            # Fallback: try to find the most recent normalized file in the numbered subfolder
+            if file_number:
+                subfolder_name = f"{file_number:04d}"
+                pattern = f"{output_dir}/{subfolder_name}/*normalized.obj"
+                matching_files = glob.glob(pattern)
+                if matching_files:
+                    mesh_path_gt = matching_files[0]  # Should only be one
+                else:
+                    print(f"No normalized mesh file found in subfolder: {subfolder_name}")
+                    return gr.update(value=None)
+            else:
+                print(f"No file number provided and no normalized mesh path")
+                return gr.update(value=None)
         
         # Check if the normalized mesh exists
         if not os.path.exists(mesh_path_gt):
@@ -448,7 +520,14 @@ def run_reconstruction(input_mesh, sample_points_num, pruning, seed, error_msg):
                 mesh_recon = model(points_sample[None], sparse_voxels_sp)[0]
 
             print(f"Reconstruction successful with {len(mesh_recon.vertices)} vertices and {len(mesh_recon.faces)} faces")
-            mesh_path_recon = f"{output_dir}/{mesh_name}_{random_hex}_reconstructed.obj"
+            
+            if use_batch_naming and batch_output_dir:
+                # Use original input path for consistent folder naming
+                base_path = original_input_path if original_input_path else input_mesh
+                mesh_path_recon = get_batch_output_filename(base_path, batch_output_dir, "reconstructed")
+            else:
+                mesh_path_recon, _ = get_sequential_filename(output_dir, "reconstructed", "obj", file_number)
+            
             mesh_reconstructed = trimesh.Trimesh(vertices=mesh_recon.vertices.tolist(), faces=mesh_recon.faces.tolist())
             mesh_reconstructed.export(mesh_path_recon)
             print(f"Saved reconstructed mesh to {mesh_path_recon}")
@@ -472,37 +551,167 @@ def open_output_folder():
     except Exception as e:
         return f"Error opening folder: {str(e)}"
 
-with gr.Blocks(title="TripoSFRecon") as demo:
+def process_single_file_batch(input_file, output_dir, sample_points_num, pruning, skip_existing):
+    """Process a single file in batch mode"""
+    try:
+        base_name = os.path.splitext(os.path.basename(input_file))[0]
+        
+        # Check if output files already exist and skip if requested
+        if skip_existing:
+            subfolder_path = os.path.join(output_dir, base_name)
+            if os.path.exists(subfolder_path):
+                # Check if both normalized and reconstructed files exist
+                normalized_pattern = os.path.join(subfolder_path, f"{base_name}_normalized.obj")
+                reconstructed_pattern = os.path.join(subfolder_path, f"{base_name}_reconstructed.obj")
+                if os.path.exists(normalized_pattern) and os.path.exists(reconstructed_pattern):
+                    return f"Skipped {base_name} (folder {base_name} already exists)"
+        
+        # Normalize mesh
+        normalized_result, error_msg, used_file_number = run_normalize_mesh(input_file, use_batch_naming=True, batch_output_dir=output_dir, original_input_path=input_file)
+        if error_msg:
+            return f"Error normalizing {base_name}: {error_msg}"
+        
+        # Reconstruct mesh
+        reconstructed_result = run_reconstruction(
+            input_file, sample_points_num, pruning, 0, None, 
+            normalized_mesh_path=normalized_result, 
+            use_batch_naming=True, 
+            batch_output_dir=output_dir,
+            original_input_path=input_file
+        )
+        
+        if reconstructed_result:
+            return f"Successfully processed {base_name} -> folder {base_name}"
+        else:
+            return f"Error reconstructing {base_name}"
+            
+    except Exception as e:
+        return f"Error processing {os.path.basename(input_file)}: {str(e)}"
+
+def run_batch_processing(input_folder, output_folder, sample_points_num, pruning, skip_existing, progress=gr.Progress()):
+    """Process all mesh files in a folder"""
+    try:
+        if not input_folder or not os.path.exists(input_folder):
+            return "Error: Input folder does not exist or is not specified"
+        
+        if not output_folder:
+            return "Error: Output folder is not specified"
+        
+        # Create output folder if it doesn't exist
+        os.makedirs(output_folder, exist_ok=True)
+        
+        # Find all mesh files in input folder
+        supported_extensions = ['*.obj', '*.glb']
+        input_files = []
+        for ext in supported_extensions:
+            input_files.extend(glob.glob(os.path.join(input_folder, ext)))
+            input_files.extend(glob.glob(os.path.join(input_folder, ext.upper())))
+        
+        if not input_files:
+            return f"No mesh files (.obj, .glb) found in {input_folder}"
+        
+        results = []
+        total_files = len(input_files)
+        
+        for i, input_file in enumerate(input_files):
+            progress((i + 1) / total_files, f"Processing {os.path.basename(input_file)} ({i + 1}/{total_files})")
+            result = process_single_file_batch(input_file, output_folder, sample_points_num, pruning, skip_existing)
+            results.append(result)
+        
+        # Summary
+        successful = sum(1 for r in results if "Successfully processed" in r)
+        skipped = sum(1 for r in results if "Skipped" in r)
+        errors = total_files - successful - skipped
+        
+        summary = f"Batch processing completed!\n"
+        summary += f"Total files: {total_files}\n"
+        summary += f"Successfully processed: {successful}\n"
+        summary += f"Skipped: {skipped}\n"
+        summary += f"Errors: {errors}\n\n"
+        summary += "Details:\n" + "\n".join(results)
+        
+        return summary
+        
+    except Exception as e:
+        return f"Error during batch processing: {str(e)}"
+
+with gr.Blocks(title="TripoSFRecon",theme=gr.themes.Soft()) as demo:
     gr.Markdown(HEADER)
 
-    with gr.Row():
-        with gr.Column():
+    with gr.Tabs():
+        with gr.TabItem("Single File Processing"):
             with gr.Row():
-                input_mesh_path = gr.File(label="Upload mesh file (.obj, .glb)", file_types=[".obj", ".glb"], type="filepath")
-            
-            with gr.Accordion("Reconstruction Settings", open=True):
-                use_pruning = gr.Checkbox(label="Pruning", value=False)
-                recon_button = gr.Button("Reconstruct Mesh", variant="primary")
-                seed = gr.Slider(
-                    label="Seed",
-                    minimum=0,
-                    maximum=MAX_SEED,
-                    step=0,
-                    value=0
-                )
-                sample_points_num = gr.Slider(
-                    label="Sample point number",
-                    minimum=819200,
-                    maximum=8192000,
-                    step=100,
-                    value=819200
-                )
-                randomize_seed = gr.Checkbox(label="Randomize seed", value=True)
-        with gr.Column():
-            normalized_model_output = gr.Model3D(label="Normalized Mesh", interactive=True)
-            open_folder_button = gr.Button("Open Outputs Folder")
-            reconstructed_model_output = gr.Model3D(label="Reconstructed Mesh", interactive=True)
-            error_output = gr.Textbox(label="Error Messages", visible=True)
+                with gr.Column():
+                    with gr.Row():
+                        input_mesh_path = gr.File(label="Upload mesh file (.obj, .glb)", file_types=[".obj", ".glb"], type="filepath")
+                    
+                    with gr.Accordion("Reconstruction Settings", open=True):
+                        use_pruning = gr.Checkbox(label="Pruning", value=False)
+                        recon_button = gr.Button("Reconstruct Mesh", variant="primary")
+                        seed = gr.Slider(
+                            label="Seed",
+                            minimum=0,
+                            maximum=MAX_SEED,
+                            step=0,
+                            value=0
+                        )
+                        sample_points_num = gr.Slider(
+                            label="Sample point number",
+                            minimum=819200,
+                            maximum=8192000,
+                            step=100,
+                            value=819200
+                        )
+                        randomize_seed = gr.Checkbox(label="Randomize seed", value=True)
+                with gr.Column():
+                    normalized_model_output = gr.Model3D(label="Normalized Mesh", interactive=True)
+                    open_folder_button = gr.Button("Open Outputs Folder")
+                    reconstructed_model_output = gr.Model3D(label="Reconstructed Mesh", interactive=True)
+                    error_output = gr.Textbox(label="Error Messages", visible=True)
+        
+        with gr.TabItem("Batch Processing"):
+            with gr.Row():
+                with gr.Column():
+                    input_folder = gr.Textbox(label="Input Folder Path", placeholder="Enter path to folder containing mesh files")
+                    output_folder = gr.Textbox(label="Output Folder Path", placeholder="Enter path for output files")
+                    
+                    with gr.Accordion("Batch Settings", open=True):
+                        batch_use_pruning = gr.Checkbox(label="Pruning", value=False)
+                        batch_sample_points_num = gr.Slider(
+                            label="Sample point number",
+                            minimum=819200,
+                            maximum=8192000,
+                            step=100,
+                            value=819200
+                        )
+                        skip_existing = gr.Checkbox(label="Skip existing files", value=True)
+                        batch_process_button = gr.Button("Start Batch Processing", variant="primary")
+                
+                with gr.Column():
+                    batch_output = gr.Textbox(label="Batch Processing Results", lines=20, max_lines=30)
+
+
+    with gr.Row():
+        gr.Markdown("""### TripoSF represents a significant leap forward in 3D shape modeling, combining high-resolution capabilities with arbitrary topology support.
+
+**New Features:**
+- **Clean sequential naming**: Files are saved with clean sequential numbers in organized subfolders for single file processing
+  - Single file format: `outputs/0001/0001_converted.obj`, `outputs/0001/0001_normalized.obj`, `outputs/0001/0001_reconstructed.obj`
+  - Each single processing session gets its own numbered subfolder (0001, 0002, etc.)
+- **Batch processing**: Process entire folders of mesh files with progress tracking and skip existing files option
+  - Batch file format: `outputs/filename/filename_converted.obj`, `outputs/filename/filename_normalized.obj`, `outputs/filename/filename_reconstructed.obj`
+  - Each batch file gets its own subfolder named after the input file
+
+**Usage Tips:**
+1. It is recommanded to enable `pruning` for open-surface objects
+2. Increasing sampling points is helpful for reconstructing complex shapes
+3. Supports both OBJ and GLB file formats with robust conversion (GLB files will be automatically converted to OBJ)
+4. Use batch processing for processing multiple files efficiently
+5. Files are organized in numbered subfolders for easy management""")
+
+    # State to store normalized mesh path and file number
+    normalized_mesh_state = gr.State()
+    file_number_state = gr.State()
 
     open_folder_button.click(
         fn=open_output_folder,
@@ -510,18 +719,33 @@ with gr.Blocks(title="TripoSFRecon") as demo:
         outputs=[error_output]
     )
 
+    def normalize_and_store_path(input_mesh):
+        # Let run_normalize_mesh handle the file number determination
+        normalized_path, error_msg, used_file_number = run_normalize_mesh(input_mesh)
+        return normalized_path, error_msg, normalized_path, used_file_number
+
+    def reconstruct_with_path(input_mesh, sample_points_num, use_pruning, seed, error_output, normalized_path, file_number):
+        return run_reconstruction(input_mesh, sample_points_num, use_pruning, seed, error_output, normalized_path, False, None, file_number)
+
     recon_button.click(
-        run_normalize_mesh,
+        normalize_and_store_path,
         inputs=[input_mesh_path],
-        outputs=[normalized_model_output, error_output]
+        outputs=[normalized_model_output, error_output, normalized_mesh_state, file_number_state]
     ).then(
         get_random_seed,
         inputs=[randomize_seed, seed],
         outputs=[seed],
     ).then(
-        run_reconstruction,
-        inputs=[input_mesh_path, sample_points_num, use_pruning, seed, error_output],
+        reconstruct_with_path,
+        inputs=[input_mesh_path, sample_points_num, use_pruning, seed, error_output, normalized_mesh_state, file_number_state],
         outputs=[reconstructed_model_output],
+    )
+
+    # Batch processing event handler
+    batch_process_button.click(
+        run_batch_processing,
+        inputs=[input_folder, output_folder, batch_sample_points_num, batch_use_pruning, skip_existing],
+        outputs=[batch_output]
     )
 
 args = parse_args()
