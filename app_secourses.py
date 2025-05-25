@@ -655,13 +655,18 @@ with gr.Blocks(title="TripoSFRecon",theme=gr.themes.Soft()) as demo:
                             step=0,
                             value=0
                         )
-                        sample_points_num = gr.Slider(
-                            label="Sample point number",
-                            minimum=819200,
-                            maximum=8192000,
-                            step=100,
-                            value=819200
-                        )
+                        with gr.Row():
+                            sample_points_num = gr.Slider(
+                                label="Sample point number",
+                                minimum=819200,
+                                maximum=8192000,
+                                step=100,
+                                value=819200
+                            )
+                        with gr.Row():
+                            preset_fast = gr.Button("Fast (819K)", size="sm", variant="secondary")
+                            preset_balanced = gr.Button("Balanced (2M)", size="sm", variant="secondary")
+                            preset_high = gr.Button("High Quality (4M)", size="sm", variant="secondary")
                         randomize_seed = gr.Checkbox(label="Randomize seed", value=True)
                 with gr.Column():
                     normalized_model_output = gr.Model3D(label="Normalized Mesh", interactive=True)
@@ -677,13 +682,18 @@ with gr.Blocks(title="TripoSFRecon",theme=gr.themes.Soft()) as demo:
                     
                     with gr.Accordion("Batch Settings", open=True):
                         batch_use_pruning = gr.Checkbox(label="Pruning", value=False)
-                        batch_sample_points_num = gr.Slider(
-                            label="Sample point number",
-                            minimum=819200,
-                            maximum=8192000,
-                            step=100,
-                            value=819200
-                        )
+                        with gr.Row():
+                            batch_sample_points_num = gr.Slider(
+                                label="Sample point number",
+                                minimum=819200,
+                                maximum=8192000,
+                                step=100,
+                                value=819200
+                            )
+                        with gr.Row():
+                            batch_preset_fast = gr.Button("Fast (819K)", size="sm", variant="secondary")
+                            batch_preset_balanced = gr.Button("Balanced (2M)", size="sm", variant="secondary")
+                            batch_preset_high = gr.Button("High Quality (4M)", size="sm", variant="secondary")
                         skip_existing = gr.Checkbox(label="Skip existing files", value=True)
                         batch_process_button = gr.Button("Start Batch Processing", variant="primary")
                 
@@ -747,6 +757,16 @@ with gr.Blocks(title="TripoSFRecon",theme=gr.themes.Soft()) as demo:
         inputs=[input_folder, output_folder, batch_sample_points_num, batch_use_pruning, skip_existing],
         outputs=[batch_output]
     )
+
+    # Preset button event handlers for single file processing
+    preset_fast.click(lambda: 819200, outputs=[sample_points_num])
+    preset_balanced.click(lambda: 2048000, outputs=[sample_points_num])
+    preset_high.click(lambda: 4096000, outputs=[sample_points_num])
+
+    # Preset button event handlers for batch processing
+    batch_preset_fast.click(lambda: 819200, outputs=[batch_sample_points_num])
+    batch_preset_balanced.click(lambda: 2048000, outputs=[batch_sample_points_num])
+    batch_preset_high.click(lambda: 4096000, outputs=[batch_sample_points_num])
 
 args = parse_args()
 demo.launch(inbrowser=True, share=args.share)
