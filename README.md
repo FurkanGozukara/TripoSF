@@ -14,6 +14,10 @@ This app takes your problematic 3D files (.obj, .glb) and automatically:
 
 **Perfect for:** Game developers, 3D artists, researchers, 3D printing enthusiasts, and anyone working with 3D models.
 
+![screencapture-127-0-0-1-7860-2025-05-26-03_03_58](https://github.com/user-attachments/assets/5b6a12d9-be8a-45a8-b1b5-1fb0d1caeb33)
+
+![screencapture-127-0-0-1-7860-2025-05-26-03_04_18](https://github.com/user-attachments/assets/b3922ab4-2473-45be-8ccd-6d0b74141d9f)
+
 ---
 
 A state-of-the-art 3D mesh reconstruction application powered by TripoSF (Triplane-based Sparse 3D Foundation) and Variational Autoencoder (VAE) technology. This app transforms low-quality, corrupted, or poorly structured 3D meshes into high-quality, clean reconstructions using advanced AI techniques.
