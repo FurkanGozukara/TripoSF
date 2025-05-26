@@ -326,7 +326,7 @@ class TripoSFVAEInference(torch.nn.Module):
 
 # Header and constants
 HEADER = """
-### TripoSF VAE Reconstruction Improved SECourses App V5 - https://www.patreon.com/posts/126707772
+### TripoSF VAE Reconstruction Improved SECourses App V6 - https://www.patreon.com/posts/126707772
 """
 MAX_SEED = np.iinfo(np.int32).max
 device = "cuda" if torch.cuda.is_available() else "cpu"
