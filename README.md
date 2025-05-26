@@ -1,4 +1,5 @@
-# TripoSF VAE Reconstruction SECourses Improved App - This repo is for Patreon Supporters Only : https://www.patreon.com/posts/126707772
+# TripoSF VAE Reconstruction SECourses Improved App
+* This repo is for Patreon Supporters Only : https://www.patreon.com/posts/126707772
 
 ## 1-Click to Install Windows, RunPod & Massed Compute > https://www.patreon.com/posts/126707772
 
